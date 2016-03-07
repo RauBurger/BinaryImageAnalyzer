@@ -23,13 +23,13 @@ ubyte[T.sizeof] toUBytes(T)(T data)
 	return tb.b;
 }
 
-enum RecordType : ubyte
+enum RecordType : char
 {
-	Header = 0,
+	Header = '0',
 	Data16bit,
 	Data24bit,
 	Data32bit,
-	Count16bit = 5,
+	Count16bit = '5',
 	Count24bit,
 	StartAddr32bit,
 	StartAddr24bit,
@@ -109,25 +109,47 @@ Record parseRecord(string recordStr)
 	offset++;
 
 	string recLen = recordStr[offset..offset+2];
-	//("recLen: "~recLen.to!string).writeln;
 
 	record.recordLength = recLen.parse!ubyte(16U);
 	offset += 2;
 
 	string addrStr = recordStr[offset..offset+addrSize*2];
-	//("addrStr: "~addrStr.to!string).writeln;
 
 	record.address = addrStr.parse!uint(16U);
 	offset += addrSize*2;
 
-/+
-	("offset: "~offset.to!string).writeln;
-	("recordStr: "~recordStr).writeln;
-	("recordStr.length: "~recordStr.length.to!string).writeln;
-+/
 	record.data = recordStr[0..$-2].toUbytes(offset);
 
 	return record;
+}
+
+void printHelp()
+{
+	writeln("BinaryImageAnalyzer options: ");
+	writeln("\t--file\t\tfile to read or generate");
+	writeln("\t--gen\t\tgenerate an s19 file");
+	writeln("\t--address\tstarting address for generated file (use 0x if in hex)");
+	writeln("\t\t\tdefault: 0xFE8000");
+	writeln("\t--size\t\tsize of generated file (use 0x if in hex)");
+	writeln("\t\t\tdefault: 0x10000");
+	writeln("\t--help\t\tprints this message");
+}
+
+string addrToString(Record record)
+{
+	if((record.type == RecordType.Header) || (record.type == RecordType.Data16bit) || (record.type == RecordType.StartAddr16bit))
+	{
+		return record.address.toChars!(16, char, LetterCase.upper).array.rightJustify(4, '0').leftJustify(8, ' ');
+	}
+	else if((record.type == RecordType.Data24bit) || (record.type == RecordType.StartAddr24bit))
+	{
+		return record.address.toChars!(16, char, LetterCase.upper).array.rightJustify(6, '0').leftJustify(8, ' ');
+	}
+	else if((record.type == RecordType.Data32bit) || (record.type == RecordType.StartAddr32bit))
+	{
+		return record.address.toChars!(16, char, LetterCase.upper).array.rightJustify(8, '0');
+	}
+	assert(0);
 }
 
 void main(string[] args)
@@ -136,8 +158,20 @@ void main(string[] args)
 	string fileName;
 	bool generate;
 
+	auto res = getopt(args, "file|f", "file to read or generate", &fileName,
+							"gen|g", "generate an s19 file", &generate,
+							"address|a", "starting address for generated file (use 0x if in hex). default: 0xFE8000", &addressStr, 
+							"size|s", "size of generated file (use 0x if in hex). default: 0x10000", &sizeStr);
 
-	getopt(args, "file", &fileName, "gen", &generate, "address", &addressStr, "size", &sizeStr);
+	if(res.helpWanted)
+	{
+		writeln("BinaryImageAnalyzer options:");
+		foreach(opt; res.options)
+		{
+			writeln(opt.optShort, " | ", opt.optLong, "\t\t", opt.help);
+		}
+		return;
+	}
 
 	if(fileName == "")
 	{
@@ -161,9 +195,14 @@ void main(string[] args)
 
 		Record[] records = new Record[textRecords.length];
 
+		uint totalBytes = 0;
 		foreach(int i, immutable record; textRecords)
 		{
 			records[i] = record.parseRecord;
+			if((records[i].type == RecordType.Data16bit) || (records[i].type == RecordType.Data24bit) || (records[i].type == RecordType.Data32bit))
+			{
+				totalBytes += records[i].recordLength;
+			}
 		}
 
 		foreach(record; records)
@@ -180,9 +219,10 @@ void main(string[] args)
 			}
 			else
 			{
-				writeln(record.recordLength.to!string, "\t0x", record.address.toChars!(16, char, LetterCase.upper), "\t", dataStr);
+				writeln("S"~record.type~"  "~record.recordLength.to!string, "\t0x", record.addrToString, "\t", dataStr);
 			}
 		}
+		writeln("Total data bytes: ", totalBytes);
 	}
 	else
 	{
