@@ -1,0 +1,7 @@
+{
+	"name": "binaryimageanalyzer",
+	"description": "A minimal D application.",
+	"copyright": "Copyright © 2016, Robert F. Rau II",
+	"authors": ["Rob Rau"],
+	"targetType": "executable"
+}
