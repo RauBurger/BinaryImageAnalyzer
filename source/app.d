@@ -3,10 +3,12 @@ module binaryimageanalyzer;
 import std.algorithm;
 import std.array;
 import std.conv;
+import std.digest.crc;
 import std.file;
 import std.getopt;
 import std.algorithm.iteration;
 import std.math;
+import std.range;
 import std.stdio;
 import std.string;
 import std.traits;
@@ -226,6 +228,7 @@ void main(string[] args)
 	}
 	else
 	{
+		import std.bitmanip : nativeToLittleEndian, nativeToBigEndian;
 		ubyte[] data = new ubyte[ushort.max];
 		string output;
 
@@ -233,6 +236,16 @@ void main(string[] args)
 		{
 			el = cast(ubyte)i;
 		}
+
+		uint sum = 0;
+		foreach(el; data)
+		{
+			sum += cast(uint)el;
+		}
+
+		data ~= nativeToLittleEndian(~sum);
+		auto crc = crc32Of(data);
+		data ~= crc;
 
 		uint address = 0xFE8000;
 		uint bytesPerRecord = 32;
@@ -263,6 +276,9 @@ void main(string[] args)
 			}
 		}
 		
+		// account for checksum and crc
+		imageSize += 8;
+
 		writeln("address is: ", address);
 
 		uint numRecords = to!uint(ceil(cast(double)imageSize/cast(double)bytesPerRecord));
@@ -277,8 +293,9 @@ void main(string[] args)
 		{
 			uint[36] tmpData;
 			tmpData[0] = 36;
-			auto addr = toUBytes(address)[0..$-1];
-			reverse(addr);
+			//auto addr = toUBytes(address)[0..$-1];
+			auto addr = nativeToBigEndian(address)[1..$];
+			//reverse(addr);
 			tmpData[1..4] = to!(uint[])(addr);
 			tmpData[4..$] = to!(uint[])(data[offset..offset+32]);
 			offset += 32;
@@ -300,6 +317,28 @@ void main(string[] args)
 			output ~= rec~'\n';
 			address += 32;
 		}
+
+		output ~= "S2";
+
+		uint[12] tmpData;
+		tmpData[0] = 12;
+		auto addr = nativeToBigEndian(address)[1..$];
+		tmpData[1..4] = to!(uint[])(addr);
+		tmpData[4..8] = to!(uint[])(cast(ubyte[])nativeToBigEndian(~sum));
+		tmpData[8..$] = to!(uint[])(cast(ubyte[])crc);
+
+		uint checksum = 0;
+		foreach(el; tmpData)
+		{
+			checksum += el;
+			output ~= toChars!(16, char, LetterCase.upper)(el).array.rightJustify(2,'0');
+		}
+		checksum &= 0xFF;		
+		checksum = (~checksum) & 0xFF;
+
+		output ~= toChars!(16, char, LetterCase.upper)(checksum).array.rightJustify(2,'0') ~ "\n";
+
+		output ~= "S9030000FC\n";
 
 		std.file.write(fileName, output);
 	}
