@@ -351,32 +351,6 @@ void main(string[] args)
 	}
 	else
 	{
-		import std.bitmanip : nativeToLittleEndian, nativeToBigEndian;
-		ubyte[] data = new ubyte[ushort.max];
-		string output;
-
-		foreach(uint i, ref el; data)
-		{
-			el = cast(ubyte)i;
-		}
-
-		uint sum = 0;
-		foreach(el; data)
-		{
-			sum += cast(uint)el;
-		}
-
-		data ~= nativeToLittleEndian(~sum);
-		CRC32 crc32;
-		foreach(chunk; data.chunks(4))
-		{
-			reverse(chunk);
-			crc32.put(chunk);
-		}
-		//auto crc = crc32Of(data);
-		auto crc = crc32.finish;
-		data ~= crc;
-
 		uint address = 0xFE8000;
 		uint bytesPerRecord = 32;
 		uint imageSize = 0x10000;
@@ -405,7 +379,38 @@ void main(string[] args)
 				imageSize = sizeStr.parse!uint;
 			}
 		}
+
+		import std.bitmanip : nativeToLittleEndian, nativeToBigEndian, littleEndianToNative, bigEndianToNative;
+		ubyte[] data = new ubyte[imageSize];
+		string output;
+
+		foreach(uint i, ref el; data)
+		{
+			el = cast(ubyte)i;
+		}
+
+		uint sum = 0;
+		foreach(chunk; data.chunks(4))
+		{
+			sum += bigEndianToNative!(uint, 4)(chunk[0..4]);
+		}
+
+		//data ~= nativeToLittleEndian(~sum);
+		data ~= nativeToBigEndian(~sum);
 		
+		CRC32 crc32;
+
+		foreach(chunk; data.chunks(4))
+		{
+			reverse(chunk);
+			crc32.put(chunk);
+			reverse(chunk);
+		}
+		
+		//auto crc = crc32Of(data);
+		auto crc = crc32.finish;
+		data ~= crc;
+
 		// account for checksum and crc
 		imageSize += 8;
 
@@ -427,6 +432,7 @@ void main(string[] args)
 			auto addr = nativeToBigEndian(address)[1..$];
 			//reverse(addr);
 			tmpData[1..4] = to!(uint[])(addr);
+
 			tmpData[4..$] = to!(uint[])(data[offset..offset+32]);
 			offset += 32;
 
@@ -455,6 +461,7 @@ void main(string[] args)
 		auto addr = nativeToBigEndian(address)[1..$];
 		tmpData[1..4] = to!(uint[])(addr);
 		tmpData[4..8] = to!(uint[])(cast(ubyte[])nativeToBigEndian(~sum));
+		reverse(cast(ubyte[])crc);
 		tmpData[8..$] = to!(uint[])(cast(ubyte[])crc);
 
 		uint checksum = 0;
