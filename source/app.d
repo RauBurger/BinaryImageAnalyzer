@@ -24,7 +24,130 @@ ubyte[T.sizeof] toUBytes(T)(T data)
 	conv tb = { type : data };
 	return tb.b;
 }
+/+
+interface IBinaryTextEncoding
+{
+public:
+	struct Record
+	{
+		RecordType type;
+		ubyte recordLength;
+		uint address;
+		ubyte[] data;
+		ubyte checksum;
+	}
 
+	ubyte[] GetData(uint address);
+	//void PutHeader(string data);
+	void PutData(uint address, ubyte[] data);
+	void SaveImage(string filename);
+}
+
+
+class SRecord : IBinaryImage
+{
+	enum RecordType : char
+	{
+		Header = '0',
+		Data16bit,
+		Data24bit,
+		Data32bit,
+		Count16bit = '5',
+		Count24bit,
+		StartAddr32bit,
+		StartAddr24bit,
+		StartAddr16bit
+	}
+
+public:
+	this(string file)
+	{
+
+	}
+
+	ubyte[] GetData(uint address)
+	{
+
+	}
+
+	//void PutHeader(string data);
+	void PutData(uint address, ubyte[] data)
+	{
+
+	}
+
+	void SaveImage(string filename)
+	{
+
+	}
+
+private:
+
+	Record parseRecord(string recordStr)
+	{
+		Record record;
+		RecordType recType;
+		int addrSize;
+		uint offset = 1;
+
+		switch(recordStr[offset])
+		{
+			case '0':
+				record.type = RecordType.Header;
+				addrSize = 2;
+				break;
+			case '1':
+				record.type = RecordType.Data16bit;
+				addrSize = 2;
+				break;
+			case '2':
+				record.type = RecordType.Data24bit;
+				addrSize = 3;
+				break;
+			case '3':
+				record.type = RecordType.Data32bit;
+				addrSize = 4;
+				break;
+			case '5':
+				record.type = RecordType.Count16bit;
+				break;
+			case '6':
+				record.type = RecordType.Count24bit;
+				break;
+			case '7':
+				record.type = RecordType.StartAddr32bit;
+				addrSize = 4;
+				break;
+			case '8':
+				record.type = RecordType.StartAddr24bit;
+				addrSize = 3;
+				break;
+			case '9':
+				record.type = RecordType.StartAddr16bit;
+				addrSize = 2;
+				break;
+			default:
+				break;
+		}
+		offset++;
+
+		string recLen = recordStr[offset..offset+2];
+
+		record.recordLength = recLen.parse!ubyte(16U);
+		offset += 2;
+
+		string addrStr = recordStr[offset..offset+addrSize*2];
+
+		record.address = addrStr.parse!uint(16U);
+		offset += addrSize*2;
+
+		record.data = recordStr[0..$-2].toUbytes(offset);
+
+		return record;
+	}
+
+}
++/
 enum RecordType : char
 {
 	Header = '0',
@@ -244,7 +367,14 @@ void main(string[] args)
 		}
 
 		data ~= nativeToLittleEndian(~sum);
-		auto crc = crc32Of(data);
+		CRC32 crc32;
+		foreach(chunk; data.chunks(4))
+		{
+			reverse(chunk);
+			crc32.put(chunk);
+		}
+		//auto crc = crc32Of(data);
+		auto crc = crc32.finish;
 		data ~= crc;
 
 		uint address = 0xFE8000;
