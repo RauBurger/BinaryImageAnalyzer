@@ -402,9 +402,9 @@ void main(string[] args)
 
 		foreach(chunk; data.chunks(4))
 		{
-			reverse(chunk);
+			//reverse(chunk);
 			crc32.put(chunk);
-			reverse(chunk);
+			//reverse(chunk);
 		}
 		
 		//auto crc = crc32Of(data);
